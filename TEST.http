@@ -4,8 +4,16 @@ Accept: application/json
 Content-Type: application/json
 
 {
-    "name":"chafiaaya",
+    "name":"chafiaayap",
+    "password":"123456789",
+    "email": "chafiaayao@gmail.com"
+}
+###
+POST {{api_HostAddress}}/auth/login
+Accept: application/json
+Content-Type: application/json
+
+{
     "password":"12345678",
     "email": "chafiaay@gmail.com"
 }
-###

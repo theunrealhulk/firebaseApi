@@ -1,8 +1,7 @@
 import type { Request, Response } from "express";
 import type { RegisterRequest, LoginRequest } from "../types/requests/auth.js";
-import * as admin from "firebase-admin";
 import { auth, db } from "../utils/firebase.js";
-
+import "dotenv/config";
 
 const isRegisterRequest = (body: RegisterRequest): body is RegisterRequest => {
     return "name" in body && "email" in body && "password" in body;
@@ -33,11 +32,11 @@ export const register = async (req: Request, res: Response) => {
     if (validationErrors.length > 0) {
         return res.status(400).json(validationErrors)
     }
-    
+
     let userRecord;
     try {
         // Create user in Firebase Auth
-         userRecord = await auth.createUser({
+        userRecord = await auth.createUser({
             email,
             password,
             displayName: name,
@@ -54,7 +53,7 @@ export const register = async (req: Request, res: Response) => {
         if (err.code === "auth/email-already-exists") {
             return res.status(400).json({ error: "Email already registered" });
         }
-        if(userRecord){
+        if (userRecord) {
             await auth.deleteUser(userRecord.uid);
         }
         return res.status(500).json({ error: "Failed to create user" });
@@ -68,9 +67,47 @@ export const register = async (req: Request, res: Response) => {
 };
 
 export const login = async (req: Request, res: Response) => {
+    if (!isLoginRequest(req.body)) {
+        return res.status(400).json({ error: "Invalid login data" });
+    }
     const { email, password } = req.body;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        res.status(400).json({ message: "invalid emial " })
+    }
     // Firebase auth logic here
-    res.json({ token: "..." });
+    try {
+        const response = await fetch(
+            `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.FIREBASE_WEB_API_KEY}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email,
+                    password,
+                    returnSecureToken: true,
+                }),
+            }
+        );
+        const data = await response.json();
+        if (data.error) {
+            return res.status(401).json({ error: data.error.message });
+        }
+        res.cookie("refreshToken", data.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 14 * 24 * 60 * 60 * 1000, // 14 days
+        });
+        return res.json({
+            token: data.idToken,
+            email: data.email,
+            uid: data.localId,
+            expiresIn: data.expiresIn,
+        });
+    } catch (err) {
+        return res.status(500).json({ error: "Login failed" });
+    }
 };
 export const refresh = async (req: Request, res: Response) => {
     // req.user is available from middleware

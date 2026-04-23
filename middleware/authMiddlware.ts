@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import * as admin from "firebase-admin";
+import { auth } from "../utils/firebase";
+import type { DecodedIdToken } from "firebase-admin/auth";
 
 export const authenticate = async (
     req: Request,
@@ -7,18 +8,14 @@ export const authenticate = async (
     next: NextFunction
 ) => {
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
         return res.status(401).json({ error: "Unauthorized: No token provided" });
     }
-
-    const idToken = authHeader.split("Bearer ")[1];
- 
-    
+    const token = authHeader.split("Bearer ")[1];
     try {
-        if(idToken){
-            const decodedToken = await admin.auth().verifyIdToken(idToken);
-            req.user = decodedToken; // Attach user data to request
+        if (token) {
+            const decodedToken = await auth.verifyIdToken(token);;
+            req.user = decodedToken as DecodedIdToken; // Attach user data to request
             next();
         }
     } catch (err) {
