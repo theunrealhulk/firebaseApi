@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@faker-js/faker": "^10.4.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase-admin": "^13.8.0"
@@ -18,7 +19,8 @@
   "scripts": {
     "start": "tsx main.ts",
     "dev": "nodemon --exec tsx main.ts",
-    "repl":"npx tsx repl.ts",
+    "repl": "npx tsx repl.ts",
+    "seed": "npx tsx seed.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
