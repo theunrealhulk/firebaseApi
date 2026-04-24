@@ -11,9 +11,11 @@
     "target": "esnext",
     "types": [],
     // For nodejs:
-    // "lib": ["esnext"],
-    // "types": ["node"],
+    "lib": ["esnext"],
+    "types": ["node"],
     // and npm install -D @types/node
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     // Other Outputs
     "sourceMap": true,
     "declaration": true,
@@ -36,5 +38,7 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-  }
+    "ignoreDeprecations": "6.0"
+  },
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "__mocks__", "__tests__"]
 }

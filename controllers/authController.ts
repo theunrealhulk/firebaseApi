@@ -3,14 +3,31 @@ import type { RegisterRequest, LoginRequest } from "../types/requests/auth.js";
 import { auth } from "../utils/firebase.js";
 import "dotenv/config";
 
-const isRegisterRequest = (body: RegisterRequest): body is RegisterRequest => {
-    return "name" in body && "email" in body && "password" in body;
+interface FirebaseAuthResponse {
+    idToken?: string;
+    email?: string;
+    localId?: string;
+    refreshToken?: string;
+    expiresIn?: string;
+    error?: { message: string };
+}
+
+interface FirebaseTokenResponse {
+    id_token?: string;
+    expires_in?: string;
+    refresh_token?: string;
+    error?: { message: string };
+}
+
+const isRegisterRequest = (body: unknown): body is RegisterRequest => {
+    const b = body as Record<string, unknown>;
+    return "name" in b && "email" in b && "password" in b;
 };
 
-const isLoginRequest = (body: LoginRequest): body is RegisterRequest => {
-    return "email" in body && "password" in body;
+const isLoginRequest = (body: unknown): body is LoginRequest => {
+    const b = body as Record<string, unknown>;
+    return "email" in b && "password" in b;
 };
-
 
 export const register = async (req: Request, res: Response) => {
     if (!isRegisterRequest(req.body)) {
@@ -18,23 +35,22 @@ export const register = async (req: Request, res: Response) => {
     }
     const { name, email, password } = req.body;
 
-    const validationErrors = []
+    const validationErrors: Array<Record<string, string>> = [];
     if (name.length < 3 || name.length > 100) {
-        validationErrors.push({ name: "name length must be between 3 and 100 charachters" })
+        validationErrors.push({ name: "name length must be between 3 and 100 characters" });
     }
     if (password.length < 8) {
-        validationErrors.push({ password: "password length can't be less than 8 charachters" })
+        validationErrors.push({ password: "password length can't be less than 8 characters" });
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-        validationErrors.push({ email: "must match a valid email address" })
+        validationErrors.push({ email: "must match a valid email address" });
     }
     if (validationErrors.length > 0) {
-        return res.status(400).json(validationErrors)
+        return res.status(400).json(validationErrors);
     }
 
     try {
-        // Create user in Firebase Auth
         const userRecord = await auth.createUser({
             email,
             password,
@@ -59,11 +75,7 @@ export const login = async (req: Request, res: Response) => {
         return res.status(400).json({ error: "Invalid login data" });
     }
     const { email, password } = req.body;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        res.status(400).json({ message: "invalid emial " })
-    }
-    // Firebase auth logic here
+
     try {
         const response = await fetch(
             `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.FIREBASE_WEB_API_KEY}`,
@@ -77,16 +89,15 @@ export const login = async (req: Request, res: Response) => {
                 }),
             }
         );
-        const data = await response.json();
+        const data = await response.json() as FirebaseAuthResponse;
         if (data.error) {
             return res.status(401).json({ error: data.error.message });
         }
-        console.log("Firebase response:", data);
         res.cookie("refreshToken", data.refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
             sameSite: "strict",
-            maxAge: 14 * 24 * 60 * 60 * 1000, // 14 days
+            maxAge: 14 * 24 * 60 * 60 * 1000,
         });
         return res.json({
             token: data.idToken,
@@ -98,6 +109,7 @@ export const login = async (req: Request, res: Response) => {
         return res.status(500).json({ error: "Login failed" });
     }
 };
+
 export const refresh = async (req: Request, res: Response) => {
     const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
     if (!refreshToken) {
@@ -115,11 +127,10 @@ export const refresh = async (req: Request, res: Response) => {
                 }),
             }
         );
-        const data = await response.json();
+        const data = await response.json() as FirebaseTokenResponse;
         if (data.error) {
             return res.status(401).json({ error: data.error.message });
         }
-        // Set new refresh token in cookie
         res.cookie("refreshToken", data.refresh_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
@@ -134,12 +145,14 @@ export const refresh = async (req: Request, res: Response) => {
         return res.status(500).json({ error: "Token refresh failed" });
     }
 };
+
 export const logout = async (req: Request, res: Response) => {
-    const uid = req.user?.uid;  // From auth middleware
+    const uid = req.user?.uid;
+    if (!uid) {
+        return res.status(400).json({ error: "User ID required" });
+    }
     try {
         await auth.revokeRefreshTokens(uid);
-
-        // Clear refresh token cookie if stored
         res.clearCookie("refreshToken");
         return res.json({ message: "Logged out successfully" });
     } catch (err) {

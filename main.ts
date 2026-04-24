@@ -13,6 +13,11 @@ app.use("/orders", orderRoutes);
 app.use("/admin", adminRoutes);
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+
+export { app };
+
+if (process.env.NODE_ENV !== "test") {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
