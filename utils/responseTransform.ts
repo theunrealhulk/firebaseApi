@@ -1,9 +1,7 @@
 import type { ResponseProduct } from "../types/response/ResponseProduct.js";
 import type { ResponseOrder } from "../types/response/ResponseOrder.js";
 import type { ResponseOrderItem } from "../types/response/ResponseOrderItem.js";
-import type { Product } from "../models/Product.js";
-import type { Order } from "../models/Order.js";
-import type { OrderItem } from "../models/OrderItem.js";
+
 
 export const toResponseProduct = (doc: any): ResponseProduct => {
     const data = doc.data();

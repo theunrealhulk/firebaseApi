@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import type { RegisterRequest, LoginRequest } from "../types/requests/auth.js";
-import { auth, db } from "../utils/firebase.js";
+import { auth } from "../utils/firebase.js";
 import "dotenv/config";
 
 const isRegisterRequest = (body: RegisterRequest): body is RegisterRequest => {
@@ -33,37 +33,25 @@ export const register = async (req: Request, res: Response) => {
         return res.status(400).json(validationErrors)
     }
 
-    let userRecord;
     try {
         // Create user in Firebase Auth
-        userRecord = await auth.createUser({
+        const userRecord = await auth.createUser({
             email,
             password,
             displayName: name,
         });
-        // Save user to Firestore
-        const userDoc = {
-            name,
-            email,
-            isActive: true,
-            createdAt: new Date(),
-        };
-        await db.collection("users").doc(userRecord.uid).set(userDoc);
+
+        return res.status(201).json({
+            uid: userRecord.uid,
+            email: userRecord.email,
+            name: userRecord.displayName,
+        });
     } catch (err: any) {
         if (err.code === "auth/email-already-exists") {
             return res.status(400).json({ error: "Email already registered" });
         }
-        if (userRecord) {
-            await auth.deleteUser(userRecord.uid);
-        }
         return res.status(500).json({ error: "Failed to create user" });
     }
-
-    return res.status(201).json({
-        message: "User created",
-        uid: userRecord.uid,
-        email: userRecord.email
-    });
 };
 
 export const login = async (req: Request, res: Response) => {
