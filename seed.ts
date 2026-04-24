@@ -40,10 +40,12 @@ const seedProducts = async () => {
 const seedUsers = async () => {
     console.log("Seeding users...");
     const userIds: string[] = [];
+    const adminEmails: string[] = [];
 
     for (let i = 0; i < NUM_USERS; i++) {
         const email = faker.internet.email();
         const password = "Password123!";
+        const isAdmin = i === 0; // First user is admin
         
         try {
             const userRecord = await auth.createUser({
@@ -51,14 +53,26 @@ const seedUsers = async () => {
                 password,
                 displayName: faker.person.fullName(),
             });
+            
+            // Set role
+            await auth.setCustomUserClaims(userRecord.uid, { 
+                role: isAdmin ? "admin" : "client" 
+            });
+            
             userIds.push(userRecord.uid);
-            console.log(`Created user ${i + 1}: ${email}`);
+            if (isAdmin) {
+                adminEmails.push(email);
+            }
+            console.log(`Created user ${i + 1}: ${email} (${isAdmin ? "admin" : "client"})`);
         } catch (err: any) {
             console.log(`Failed to create user ${email}: ${err.message}`);
         }
     }
 
-    console.log(`Created ${userIds.length} users!`);
+    console.log(`\nCreated ${userIds.length} users!`);
+    console.log(`Admins: ${adminEmails.join(", ")}`);
+    console.log(`Default password for all users: Password123!`);
+    
     return userIds;
 };
 

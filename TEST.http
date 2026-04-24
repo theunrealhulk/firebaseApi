@@ -1,6 +1,8 @@
 @api_HostAddress = http://localhost:5000
-@token = eyJhbGciOiJSUzI1NiIsImtpZCI6IjNiMDk1NzQ3YmY4MzMxZWE0YWQ1M2YzNzBjNjMyNjAxNzliMGQyM2EiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoiY2hhZmlhYXlhIiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL2RlbW9iYXNlLTQxYzU5IiwiYXVkIjoiZGVtb2Jhc2UtNDFjNTkiLCJhdXRoX3RpbWUiOjE3NzcwMTk1MjQsInVzZXJfaWQiOiJQS3ZSZGFBZWV3WnRmd0VpWWgxSGZkUENnV2kxIiwic3ViIjoiUEt2UmRhQWVld1p0ZndFaVloMUhmZFBDZ1dpMSIsImlhdCI6MTc3NzAxOTUyNCwiZXhwIjoxNzc3MDIzMTI0LCJlbWFpbCI6ImNoYWZpYWF5QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiZmlyZWJhc2UiOnsiaWRlbnRpdGllcyI6eyJlbWFpbCI6WyJjaGFmaWFheUBnbWFpbC5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.bE6y1BRofjt3lki3LrV5nfxKxXBI1VONV0CVufjZT-wgIUQ_1eIOVXA_18JGdOrdYzBVflkbj4JzQcyy-uKLYiuuEQDoPlsVVp5yFx3XqYWmIfkQfV0X6OcdDhOABxq4hPPDV92CMPWj6Zy2iHI_iiV5tR2mgStVHFChVKUPjoW0AN-C66j1yEl1pt5RIZtCGD4-x6ttCJ_osFug78RwjCJiSXooPdD0yNPqFrzG4AsHEa760BXAQ8VHTwd3-i_HpMoJwpjBinUglJRamuWsvbXrxawo0SZjNWRBeHb3FTuL6A1hy6sfBgwOC0y9g_aL6n8NIoqjMCFCkRz_9d15Ow
-@refreshToken = AMf-vBz5oEScG94diuO40J8RsOND2-rnLyNlitlp8ELnD0q7yD8AWAUpAaWlqeAbAzyp8JJPf1T1Z35lA0ybX_2RbjRKdLH832Tnw1p2eDxpwAe17nYk1MF4O1RPySCbTO0V_ri73YQpkudCdK88VMtjN1_HD_njGtPHuT9Y1T4qdPtj8hxeqZzoJ2AYvRep4vMEmWSJJg54tJnZQ0fF6Rqy7sNG4iEQig
+@token = YOUR_ID_TOKEN_HERE
+@refreshToken = YOUR_REFRESH_TOKEN_HERE
+
+# ===== AUTH =====
 
 ### Register
 POST {{api_HostAddress}}/auth/register
@@ -8,9 +10,9 @@ Accept: application/json
 Content-Type: application/json
 
 {
-    "name": "chafiaayap",
+    "name": "Test User",
     "password": "123456789",
-    "email": "chafiaayao@gmail.com"
+    "email": "newuser@test.com"
 }
 
 ### Login
@@ -19,8 +21,8 @@ Accept: application/json
 Content-Type: application/json
 
 {
-    "email": "chafiaay@gmail.com",
-    "password": "12345678"
+    "email": "user@test.com",
+    "password": "Password123!"
 }
 
 ### Refresh Token
@@ -38,26 +40,30 @@ Accept: application/json
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-### Create Product
+# ===== PRODUCTS (Public for GET) =====
+
+### Get All Products
+GET {{api_HostAddress}}/products
+
+### Get Single Product
+GET {{api_HostAddress}}/products/PRODUCT_ID
+
+# ===== PRODUCTS (Admin Only) =====
+
+### Create Product (Admin)
 POST {{api_HostAddress}}/products
 Accept: application/json
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-    "name": "Product 2",
+    "name": "Product 1",
     "price": 100,
-    "description": "Test product 2 description"
+    "description": "Test product"
 }
 
-### Get All Products
-GET {{api_HostAddress}}/products?limit=5&page=2
-
-### Get Single Product
-GET {{api_HostAddress}}/products/UIleEGsFCNQHHZYNi5M0
-
-### Update Product
-PUT {{api_HostAddress}}/products/UIleEGsFCNQHHZYNi5M0
+### Update Product (Admin)
+PUT {{api_HostAddress}}/products/PRODUCT_ID
 Accept: application/json
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -67,13 +73,15 @@ Content-Type: application/json
     "price": 150
 }
 
-### Delete Product
-DELETE {{api_HostAddress}}/products/uIqHLC7A6IxWTg61fVoK
+### Delete Product (Admin)
+DELETE {{api_HostAddress}}/products/PRODUCT_ID
 Accept: application/json
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-### Create Order
+# ===== ORDERS (Client - Own Orders Only) =====
+
+### Create Order (Authenticated)
 POST {{api_HostAddress}}/orders
 Accept: application/json
 Authorization: Bearer {{token}}
@@ -82,7 +90,7 @@ Content-Type: application/json
 {
     "items": [
         {
-            "productId": "UIleEGsFCNQHHZYNi5M0",
+            "productId": "PRODUCT_ID",
             "quantity": 2,
             "price": 100
         }
@@ -90,30 +98,51 @@ Content-Type: application/json
     "total": 200
 }
 
-### Get User Orders
+### Get My Orders (Client)
 GET {{api_HostAddress}}/orders
 Accept: application/json
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-### Get All Orders
+### Get My Order Details
+GET {{api_HostAddress}}/orders/ORDER_ID/items
+Accept: application/json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+# ===== ORDERS (Admin Only) =====
+
+### Get All Orders (Admin)
 GET {{api_HostAddress}}/orders/all
 Accept: application/json
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-### Get Order Details
-GET {{api_HostAddress}}/orders/hQUx1wCPyHYpmCtnmNoV/items
-Accept: application/json
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-### Update Order Status
-PATCH {{api_HostAddress}}/orders/hQUx1wCPyHYpmCtnmNoV/status
+### Update Order Status (Admin)
+PATCH {{api_HostAddress}}/orders/ORDER_ID/status
 Accept: application/json
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
     "status": "completed"
+}
+
+# ===== ADMIN (Admin Only) =====
+
+### Get All Users (Admin)
+GET {{api_HostAddress}}/admin/users
+Accept: application/json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+### Set User Role (Admin)
+POST {{api_HostAddress}}/admin/set-role
+Accept: application/json
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "uid": "USER_UID",
+    "role": "admin"
 }
