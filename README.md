@@ -85,6 +85,7 @@ FIREBASE_WEB_API_KEY=your_web_api_key_here
 # Server
 PORT=5000
 NODE_ENV=development
+LOG_LEVEL=info
 ```
 
 ### How to Get Values
@@ -94,6 +95,7 @@ NODE_ENV=development
 | `FIREBASE_WEB_API_KEY` | Firebase Console → Project Settings → Web API Key |
 | `PORT` | Your choice (default: 5000) |
 | `NODE_ENV` | `development` or `production` |
+| `LOG_LEVEL` | `debug`, `info`, `warn`, `error` (default: `info`) |
 
 ### Service Account Setup
 

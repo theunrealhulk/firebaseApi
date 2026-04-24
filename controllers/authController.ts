@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import type { RegisterRequest, LoginRequest } from "../types/requests/auth.js";
 import { auth } from "../utils/firebase.js";
+import { logger } from "../utils/logger.js";
+import { AppError } from "../utils/errors.js";
 import "dotenv/config";
 
 interface FirebaseAuthResponse {
@@ -57,6 +59,8 @@ export const register = async (req: Request, res: Response) => {
             displayName: name,
         });
 
+        logger.info({ uid: userRecord.uid, email: userRecord.email }, "User registered");
+
         return res.status(201).json({
             uid: userRecord.uid,
             email: userRecord.email,
@@ -64,15 +68,16 @@ export const register = async (req: Request, res: Response) => {
         });
     } catch (err: any) {
         if (err.code === "auth/email-already-exists") {
-            return res.status(400).json({ error: "Email already registered" });
+            throw new AppError(400, "Email already registered");
         }
-        return res.status(500).json({ error: "Failed to create user" });
+        logger.error({ err, email }, "Failed to register user");
+        throw new AppError(500, "Failed to create user");
     }
 };
 
 export const login = async (req: Request, res: Response) => {
     if (!isLoginRequest(req.body)) {
-        return res.status(400).json({ error: "Invalid login data" });
+        throw new AppError(400, "Invalid login data");
     }
     const { email, password } = req.body;
 
@@ -91,8 +96,11 @@ export const login = async (req: Request, res: Response) => {
         );
         const data = await response.json() as FirebaseAuthResponse;
         if (data.error) {
-            return res.status(401).json({ error: data.error.message });
+            throw new AppError(401, data.error.message);
         }
+        
+        logger.info({ uid: data.localId }, "User logged in");
+
         res.cookie("refreshToken", data.refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
@@ -106,14 +114,16 @@ export const login = async (req: Request, res: Response) => {
             expiresIn: data.expiresIn,
         });
     } catch (err) {
-        return res.status(500).json({ error: "Login failed" });
+        if (err instanceof AppError) throw err;
+        logger.error({ err, email }, "Login failed");
+        throw new AppError(500, "Login failed");
     }
 };
 
 export const refresh = async (req: Request, res: Response) => {
     const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
     if (!refreshToken) {
-        return res.status(400).json({ error: "No refresh token provided" });
+        throw new AppError(400, "No refresh token provided");
     }
     try {
         const response = await fetch(
@@ -129,7 +139,7 @@ export const refresh = async (req: Request, res: Response) => {
         );
         const data = await response.json() as FirebaseTokenResponse;
         if (data.error) {
-            return res.status(401).json({ error: data.error.message });
+            throw new AppError(401, data.error.message);
         }
         res.cookie("refreshToken", data.refresh_token, {
             httpOnly: true,
@@ -142,20 +152,24 @@ export const refresh = async (req: Request, res: Response) => {
             expiresIn: data.expires_in,
         });
     } catch (err) {
-        return res.status(500).json({ error: "Token refresh failed" });
+        if (err instanceof AppError) throw err;
+        logger.error({ err }, "Token refresh failed");
+        throw new AppError(500, "Token refresh failed");
     }
 };
 
 export const logout = async (req: Request, res: Response) => {
     const uid = req.user?.uid;
     if (!uid) {
-        return res.status(400).json({ error: "User ID required" });
+        throw new AppError(400, "User ID required");
     }
     try {
         await auth.revokeRefreshTokens(uid);
+        logger.info({ uid }, "User logged out");
         res.clearCookie("refreshToken");
         return res.json({ message: "Logged out successfully" });
     } catch (err) {
-        return res.status(500).json({ error: "Logout failed" });
+        logger.error({ err, uid }, "Logout failed");
+        throw new AppError(500, "Logout failed");
     }
 };
