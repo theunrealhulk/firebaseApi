@@ -93,6 +93,7 @@ export const login = async (req: Request, res: Response) => {
         if (data.error) {
             return res.status(401).json({ error: data.error.message });
         }
+        console.log("Firebase response:", data);
         res.cookie("refreshToken", data.refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
@@ -110,14 +111,46 @@ export const login = async (req: Request, res: Response) => {
     }
 };
 export const refresh = async (req: Request, res: Response) => {
-    // req.user is available from middleware
-    res.json({ message: "Token refreshed" });
+    const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+    if (!refreshToken) {
+        return res.status(400).json({ error: "No refresh token provided" });
+    }
+    try {
+        const response = await fetch(
+            `https://securetoken.googleapis.com/v1/token?key=${process.env.FIREBASE_WEB_API_KEY}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    grant_type: "refresh_token",
+                    refresh_token: refreshToken,
+                }),
+            }
+        );
+        const data = await response.json();
+        if (data.error) {
+            return res.status(401).json({ error: data.error.message });
+        }
+        // Set new refresh token in cookie
+        res.cookie("refreshToken", data.refresh_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 14 * 24 * 60 * 60 * 1000,
+        });
+        return res.json({
+            token: data.id_token,
+            expiresIn: data.expires_in,
+        });
+    } catch (err) {
+        return res.status(500).json({ error: "Token refresh failed" });
+    }
 };
 export const logout = async (req: Request, res: Response) => {
     const uid = req.user?.uid;  // From auth middleware
     try {
         await auth.revokeRefreshTokens(uid);
-        
+
         // Clear refresh token cookie if stored
         res.clearCookie("refreshToken");
         return res.json({ message: "Logged out successfully" });
