@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { db } from "../utils/firebase.js";
+import type { Query, DocumentData } from "firebase-admin/firestore";
 import type { Product } from "../models/Product.js";
 import { toResponseProduct } from "../utils/responseTransform.js";
 import { getPaginationParams, createPaginatedResponse } from "../utils/pagination.js";
@@ -32,19 +33,27 @@ export const createProduct = async (req: Request, res: Response) => {
 
 export const getProducts = async (req: Request, res: Response) => {
     const { page, limit } = getPaginationParams(req.query);
+    const search = (req.query.search as string || "").toLowerCase().trim();
 
     try {
-        const totalSnapshot = await db.collection("products").get();
-        const total = totalSnapshot.size;
+        let query = db.collection("products") as Query<DocumentData>;
 
-        const snapshot = await db.collection("products")
+        const snapshot = await query
             .orderBy("createdAt", "desc")
             .offset((page - 1) * limit)
             .limit(limit)
             .get();
 
-        const products = snapshot.docs.map(doc => toResponseProduct(doc));
-        return res.json(createPaginatedResponse(products, page, limit, total));
+        let products = snapshot.docs.map(doc => toResponseProduct(doc));
+
+        if (search) {
+            products = products.filter(p =>
+                p.name.toLowerCase().includes(search) ||
+                p.description.toLowerCase().includes(search)
+            );
+        }
+
+        return res.json(createPaginatedResponse(products, page, limit, products.length));
     } catch (err) {
         return res.status(500).json({ error: "Failed to get products" });
     }
