@@ -3,6 +3,7 @@ import { db, auth } from "../utils/firebase.js";
 import type { Order } from "../models/Order.js";
 import type { OrderItem } from "../models/OrderItem.js";
 import { toResponseOrder, toResponseOrderItem } from "../utils/responseTransform.js";
+import { getPaginationParams, createPaginatedResponse } from "../utils/pagination.js";
 
 export const createOrder = async (req: Request, res: Response) => {
     if (!req.user?.uid) {
@@ -53,15 +54,25 @@ export const createOrder = async (req: Request, res: Response) => {
 };
 
 export const getOrders = async (req: Request, res: Response) => {
+    const { page, limit } = getPaginationParams(req.query);
+
     try {
-        const snapshot = await db.collection("orders").get();
+        const totalSnapshot = await db.collection("orders").get();
+        const total = totalSnapshot.size;
+
+        const snapshot = await db.collection("orders")
+            .orderBy("createdAt", "desc")
+            .offset((page - 1) * limit)
+            .limit(limit)
+            .get();
+
         const orders = await Promise.all(
             snapshot.docs.map(async (doc) => {
                 const userData = await getUserData(doc.data()?.userId);
                 return toResponseOrder(doc, userData);
             })
         );
-        return res.json(orders);
+        return res.json(createPaginatedResponse(orders, page, limit, total));
     } catch (err) {
         return res.status(500).json({ error: "Failed to get orders" });
     }
@@ -73,14 +84,22 @@ export const getUserOrders = async (req: Request, res: Response) => {
     }
 
     const userId = req.user.uid;
+    const { page, limit } = getPaginationParams(req.query);
 
     try {
-        const snapshot = await db.collection("orders")
-            .where("userId", "==", userId)
+        const baseQuery = db.collection("orders").where("userId", "==", userId);
+        const totalSnapshot = await baseQuery.get();
+        const total = totalSnapshot.size;
+
+        const snapshot = await baseQuery
+            .orderBy("createdAt", "desc")
+            .offset((page - 1) * limit)
+            .limit(limit)
             .get();
+
         const userData = await getUserData(userId);
         const orders = snapshot.docs.map(doc => toResponseOrder(doc, userData));
-        return res.json(orders);
+        return res.json(createPaginatedResponse(orders, page, limit, total));
     } catch (err) {
         return res.status(500).json({ error: "Failed to get orders" });
     }
@@ -88,18 +107,25 @@ export const getUserOrders = async (req: Request, res: Response) => {
 
 export const getOrderDetails = async (req: Request, res: Response) => {
     const id = req.params.id as string;
+    const { page, limit } = getPaginationParams(req.query);
 
     try {
-        const snapshot = await db.collection("orderItems")
-            .where("orderId", "==", id)
+        const baseQuery = db.collection("orderItems").where("orderId", "==", id);
+        const totalSnapshot = await baseQuery.get();
+        const total = totalSnapshot.size;
+
+        const snapshot = await baseQuery
+            .offset((page - 1) * limit)
+            .limit(limit)
             .get();
+
         const items = await Promise.all(
             snapshot.docs.map(async (doc) => {
                 const productData = await getProductData(doc.data()?.productId);
                 return toResponseOrderItem(doc, productData);
             })
         );
-        return res.json(items);
+        return res.json(createPaginatedResponse(items, page, limit, total));
     } catch (err) {
         return res.status(500).json({ error: "Failed to get order items" });
     }

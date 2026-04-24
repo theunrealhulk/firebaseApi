@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { db } from "../utils/firebase.js";
 import type { Product } from "../models/Product.js";
 import { toResponseProduct } from "../utils/responseTransform.js";
+import { getPaginationParams, createPaginatedResponse } from "../utils/pagination.js";
 
 export const createProduct = async (req: Request, res: Response) => {
     const { name, price, description } = req.body;
@@ -30,10 +31,20 @@ export const createProduct = async (req: Request, res: Response) => {
 };
 
 export const getProducts = async (req: Request, res: Response) => {
+    const { page, limit } = getPaginationParams(req.query);
+
     try {
-        const snapshot = await db.collection("products").get();
+        const totalSnapshot = await db.collection("products").get();
+        const total = totalSnapshot.size;
+
+        const snapshot = await db.collection("products")
+            .orderBy("createdAt", "desc")
+            .offset((page - 1) * limit)
+            .limit(limit)
+            .get();
+
         const products = snapshot.docs.map(doc => toResponseProduct(doc));
-        return res.json(products);
+        return res.json(createPaginatedResponse(products, page, limit, total));
     } catch (err) {
         return res.status(500).json({ error: "Failed to get products" });
     }
