@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
-import type { RegisterRequest, LoginRequest } from "../types/requests/auth.js";
+import type { RegisterInput, LoginInput } from "../utils/validation.js";
 import { auth } from "../utils/firebase.js";
+import { success, created } from "../utils/response.js";
 import { logger } from "../utils/logger.js";
 import { AppError } from "../utils/errors.js";
 import "dotenv/config";
@@ -21,36 +22,8 @@ interface FirebaseTokenResponse {
     error?: { message: string };
 }
 
-const isRegisterRequest = (body: unknown): body is RegisterRequest => {
-    const b = body as Record<string, unknown>;
-    return "name" in b && "email" in b && "password" in b;
-};
-
-const isLoginRequest = (body: unknown): body is LoginRequest => {
-    const b = body as Record<string, unknown>;
-    return "email" in b && "password" in b;
-};
-
 export const register = async (req: Request, res: Response) => {
-    if (!isRegisterRequest(req.body)) {
-        return res.status(400).json({ error: "Invalid registration data" });
-    }
-    const { name, email, password } = req.body;
-
-    const validationErrors: Array<Record<string, string>> = [];
-    if (name.length < 3 || name.length > 100) {
-        validationErrors.push({ name: "name length must be between 3 and 100 characters" });
-    }
-    if (password.length < 8) {
-        validationErrors.push({ password: "password length can't be less than 8 characters" });
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        validationErrors.push({ email: "must match a valid email address" });
-    }
-    if (validationErrors.length > 0) {
-        return res.status(400).json(validationErrors);
-    }
+    const { name, email, password } = req.body as RegisterInput;
 
     try {
         const userRecord = await auth.createUser({
@@ -61,11 +34,11 @@ export const register = async (req: Request, res: Response) => {
 
         logger.info({ uid: userRecord.uid, email: userRecord.email }, "User registered");
 
-        return res.status(201).json({
+        return created(res, {
             uid: userRecord.uid,
             email: userRecord.email,
             name: userRecord.displayName,
-        });
+        }, "User registered");
     } catch (err: any) {
         if (err.code === "auth/email-already-exists") {
             throw new AppError(400, "Email already registered");
@@ -76,10 +49,7 @@ export const register = async (req: Request, res: Response) => {
 };
 
 export const login = async (req: Request, res: Response) => {
-    if (!isLoginRequest(req.body)) {
-        throw new AppError(400, "Invalid login data");
-    }
-    const { email, password } = req.body;
+    const { email, password } = req.body as LoginInput;
 
     try {
         const response = await fetch(
@@ -107,7 +77,7 @@ export const login = async (req: Request, res: Response) => {
             sameSite: "strict",
             maxAge: 14 * 24 * 60 * 60 * 1000,
         });
-        return res.json({
+        return success(res, {
             token: data.idToken,
             email: data.email,
             uid: data.localId,
@@ -147,7 +117,7 @@ export const refresh = async (req: Request, res: Response) => {
             sameSite: "strict",
             maxAge: 14 * 24 * 60 * 60 * 1000,
         });
-        return res.json({
+        return success(res, {
             token: data.id_token,
             expiresIn: data.expires_in,
         });
@@ -167,7 +137,7 @@ export const logout = async (req: Request, res: Response) => {
         await auth.revokeRefreshTokens(uid);
         logger.info({ uid }, "User logged out");
         res.clearCookie("refreshToken");
-        return res.json({ message: "Logged out successfully" });
+        return success(res, null, "Logged out successfully");
     } catch (err) {
         logger.error({ err, uid }, "Logout failed");
         throw new AppError(500, "Logout failed");

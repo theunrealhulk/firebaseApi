@@ -2,23 +2,25 @@ import type { Request, Response } from "express";
 import { db, auth } from "../utils/firebase.js";
 import type { Order } from "../models/Order.js";
 import type { OrderItem } from "../models/OrderItem.js";
+import type { OrderInput, PaginationInput } from "../utils/validation.js";
 import { toResponseOrder, toResponseOrderItem } from "../utils/responseTransform.js";
-import { getPaginationParams, createPaginatedResponse } from "../utils/pagination.js";
+import { success, created } from "../utils/response.js";
+import { logger } from "../utils/logger.js";
+import { AppError } from "../utils/errors.js";
 
 export const createOrder = async (req: Request, res: Response) => {
-    if (!req.user?.uid) {
-        return res.status(401).json({ error: "Unauthorized" });
+    const userId = req.user?.uid;
+    if (!userId) {
+        throw new AppError(401, "Unauthorized");
     }
 
     const { items, total } = req.body;
-    const userId = req.user.uid;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ error: "Items required" });
+        throw new AppError(400, "Items required");
     }
-
     if (!total) {
-        return res.status(400).json({ error: "Total required" });
+        throw new AppError(400, "Total required");
     }
 
     try {
@@ -44,21 +46,20 @@ export const createOrder = async (req: Request, res: Response) => {
         }
         await batch.commit();
 
-        return res.status(201).json({ 
-            orderId,
-            message: "Order created" 
-        });
+        logger.info({ orderId, userId }, "Order created");
+        return created(res, { orderId }, "Order created");
     } catch (err) {
-        return res.status(500).json({ error: "Failed to create order" });
+        logger.error({ err }, "Failed to create order");
+        throw new AppError(500, "Failed to create order");
     }
 };
 
 export const getOrders = async (req: Request, res: Response) => {
-    const { page, limit } = getPaginationParams(req.query);
+    const { page, limit } = req.query as unknown as PaginationInput;
 
     try {
-        const totalSnapshot = await db.collection("orders").get();
-        const total = totalSnapshot.size;
+        const totalSnapshot = await db.collection("orders").count().get();
+        const total = totalSnapshot.data().count;
 
         const snapshot = await db.collection("orders")
             .orderBy("createdAt", "desc")
@@ -72,24 +73,30 @@ export const getOrders = async (req: Request, res: Response) => {
                 return toResponseOrder(doc, userData);
             })
         );
-        return res.json(createPaginatedResponse(orders, page, limit, total));
+        return success(res, orders, undefined, {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+        });
     } catch (err) {
-        return res.status(500).json({ error: "Failed to get orders" });
+        logger.error({ err }, "Failed to get orders");
+        throw new AppError(500, "Failed to get orders");
     }
 };
 
 export const getUserOrders = async (req: Request, res: Response) => {
-    if (!req.user?.uid) {
-        return res.status(401).json({ error: "Unauthorized" });
+    const userId = req.user?.uid;
+    if (!userId) {
+        throw new AppError(401, "Unauthorized");
     }
 
-    const userId = req.user.uid;
-    const { page, limit } = getPaginationParams(req.query);
+    const { page, limit } = req.query as unknown as PaginationInput;
 
     try {
         const baseQuery = db.collection("orders").where("userId", "==", userId);
-        const totalSnapshot = await baseQuery.get();
-        const total = totalSnapshot.size;
+        const totalSnapshot = await baseQuery.count().get();
+        const total = totalSnapshot.data().count;
 
         const snapshot = await baseQuery
             .orderBy("createdAt", "desc")
@@ -99,20 +106,26 @@ export const getUserOrders = async (req: Request, res: Response) => {
 
         const userData = await getUserData(userId);
         const orders = snapshot.docs.map(doc => toResponseOrder(doc, userData));
-        return res.json(createPaginatedResponse(orders, page, limit, total));
+        return success(res, orders, undefined, {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+        });
     } catch (err) {
-        return res.status(500).json({ error: "Failed to get orders" });
+        logger.error({ err }, "Failed to get orders");
+        throw new AppError(500, "Failed to get orders");
     }
 };
 
 export const getOrderDetails = async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const { page, limit } = getPaginationParams(req.query);
+    const { page, limit } = req.query as unknown as PaginationInput;
 
     try {
         const baseQuery = db.collection("orderItems").where("orderId", "==", id);
-        const totalSnapshot = await baseQuery.get();
-        const total = totalSnapshot.size;
+        const totalSnapshot = await baseQuery.count().get();
+        const total = totalSnapshot.data().count;
 
         const snapshot = await baseQuery
             .offset((page - 1) * limit)
@@ -125,9 +138,15 @@ export const getOrderDetails = async (req: Request, res: Response) => {
                 return toResponseOrderItem(doc, productData);
             })
         );
-        return res.json(createPaginatedResponse(items, page, limit, total));
+        return success(res, items, undefined, {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+        });
     } catch (err) {
-        return res.status(500).json({ error: "Failed to get order items" });
+        logger.error({ err }, "Failed to get order items");
+        throw new AppError(500, "Failed to get order items");
     }
 };
 
@@ -137,24 +156,23 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
     const validStatuses = ["pending", "processing", "completed", "cancelled"];
     if (!validStatuses.includes(status)) {
-        return res.status(400).json({ error: "Invalid status" });
+        throw new AppError(400, "Invalid status");
     }
 
     try {
         await db.collection("orders").doc(id).update({ status });
-        return res.json({ message: "Order status updated" });
+        logger.info({ orderId: id, status }, "Order status updated");
+        return success(res, { orderId: id, status }, "Order status updated");
     } catch (err) {
-        return res.status(500).json({ error: "Failed to update order" });
+        logger.error({ err }, "Failed to update order");
+        throw new AppError(500, "Failed to update order");
     }
 };
 
 const getUserData = async (userId: string) => {
     try {
         const user = await auth.getUser(userId);
-        return {
-            name: user.displayName || "",
-            email: user.email || "",
-        };
+        return { name: user.displayName || "", email: user.email || "" };
     } catch {
         return { name: "", email: "" };
     }

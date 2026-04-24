@@ -2,15 +2,14 @@ import type { Request, Response } from "express";
 import { db } from "../utils/firebase.js";
 import type { Query, DocumentData } from "firebase-admin/firestore";
 import type { Product } from "../models/Product.js";
+import type { ProductInput, ProductUpdateInput, SearchInput } from "../utils/validation.js";
 import { toResponseProduct } from "../utils/responseTransform.js";
-import { getPaginationParams, createPaginatedResponse } from "../utils/pagination.js";
+import { success, created } from "../utils/response.js";
+import { logger } from "../utils/logger.js";
+import { AppError } from "../utils/errors.js";
 
 export const createProduct = async (req: Request, res: Response) => {
-    const { name, price, description } = req.body;
-
-    if (!name || !price) {
-        return res.status(400).json({ error: "Name and price required" });
-    }
+    const { name, price, description, stock, category, image } = req.body as ProductInput;
 
     try {
         const productRef = db.collection("products").doc();
@@ -18,25 +17,38 @@ export const createProduct = async (req: Request, res: Response) => {
             name,
             price,
             description: description || "",
+            stock: stock ?? 0,
+            category: category || "",
+            image: image || "",
             isActive: true,
             createdAt: new Date(),
         } satisfies Product);
 
-        return res.status(201).json({ 
-            id: productRef.id,
-            message: "Product created" 
-        });
+        logger.info({ productId: productRef.id }, "Product created");
+
+        return created(res, { id: productRef.id, name, price }, "Product created");
     } catch (err) {
-        return res.status(500).json({ error: "Failed to create product" });
+        logger.error({ err }, "Failed to create product");
+        throw new AppError(500, "Failed to create product");
     }
 };
 
 export const getProducts = async (req: Request, res: Response) => {
-    const { page, limit } = getPaginationParams(req.query);
-    const search = (req.query.search as string || "").toLowerCase().trim();
+    const { page, limit, q, category, minPrice, maxPrice } = req.query as unknown as SearchInput;
+    const search = (q || "").toLowerCase().trim();
 
     try {
-        let query = db.collection("products") as Query<DocumentData>;
+        let query: Query<DocumentData> = db.collection("products").where("isActive", "==", true);
+
+        if (category) {
+            query = query.where("category", "==", category);
+        }
+        if (minPrice !== undefined) {
+            query = query.where("price", ">=", minPrice);
+        }
+        if (maxPrice !== undefined) {
+            query = query.where("price", "<=", maxPrice);
+        }
 
         const snapshot = await query
             .orderBy("createdAt", "desc")
@@ -53,9 +65,15 @@ export const getProducts = async (req: Request, res: Response) => {
             );
         }
 
-        return res.json(createPaginatedResponse(products, page, limit, products.length));
+        return success(res, products, undefined, {
+            page,
+            limit,
+            total: products.length,
+            totalPages: Math.ceil(products.length / limit),
+        });
     } catch (err) {
-        return res.status(500).json({ error: "Failed to get products" });
+        logger.error({ err }, "Failed to get products");
+        throw new AppError(500, "Failed to get products");
     }
 };
 
@@ -65,28 +83,37 @@ export const getProduct = async (req: Request, res: Response) => {
     try {
         const doc = await db.collection("products").doc(id).get();
         if (!doc.exists) {
-            return res.status(404).json({ error: "Product not found" });
+            throw new AppError(404, "Product not found");
         }
-        return res.json(toResponseProduct(doc));
+        return success(res, toResponseProduct(doc));
     } catch (err) {
-        return res.status(500).json({ error: "Failed to get product" });
+        if (err instanceof AppError) throw err;
+        logger.error({ err, id }, "Failed to get product");
+        throw new AppError(500, "Failed to get product");
     }
 };
 
 export const updateProduct = async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const { name, price, description, isActive } = req.body;
+    const updates = req.body as ProductUpdateInput;
 
     try {
+        const doc = await db.collection("products").doc(id).get();
+        if (!doc.exists) {
+            throw new AppError(404, "Product not found");
+        }
+
         await db.collection("products").doc(id).update({
-            ...(name && { name }),
-            ...(price && { price }),
-            ...(description !== undefined && { description }),
-            ...(isActive !== undefined && { isActive }),
+            ...updates,
+            updatedAt: new Date(),
         });
-        return res.json({ message: "Product updated" });
+
+        logger.info({ productId: id }, "Product updated");
+        return success(res, { id }, "Product updated");
     } catch (err) {
-        return res.status(500).json({ error: "Failed to update product" });
+        if (err instanceof AppError) throw err;
+        logger.error({ err, id }, "Failed to update product");
+        throw new AppError(500, "Failed to update product");
     }
 };
 
@@ -94,9 +121,17 @@ export const deleteProduct = async (req: Request, res: Response) => {
     const id = req.params.id as string;
 
     try {
+        const doc = await db.collection("products").doc(id).get();
+        if (!doc.exists) {
+            throw new AppError(404, "Product not found");
+        }
+
         await db.collection("products").doc(id).delete();
-        return res.json({ message: "Product deleted" });
+        logger.info({ productId: id }, "Product deleted");
+        return success(res, { id }, "Product deleted");
     } catch (err) {
-        return res.status(500).json({ error: "Failed to delete product" });
+        if (err instanceof AppError) throw err;
+        logger.error({ err, id }, "Failed to delete product");
+        throw new AppError(500, "Failed to delete product");
     }
 };
