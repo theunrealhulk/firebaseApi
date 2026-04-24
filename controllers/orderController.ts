@@ -1,7 +1,8 @@
 import type { Request, Response } from "express";
-import { db } from "../utils/firebase.js";
+import { db, auth } from "../utils/firebase.js";
 import type { Order } from "../models/Order.js";
 import type { OrderItem } from "../models/OrderItem.js";
+import { toResponseOrder, toResponseOrderItem } from "../utils/responseTransform.js";
 
 export const createOrder = async (req: Request, res: Response) => {
     if (!req.user?.uid) {
@@ -23,7 +24,6 @@ export const createOrder = async (req: Request, res: Response) => {
         const orderRef = db.collection("orders").doc();
         const orderId = orderRef.id;
 
-        // Create order
         await orderRef.set({
             userId,
             total,
@@ -31,7 +31,6 @@ export const createOrder = async (req: Request, res: Response) => {
             createdAt: new Date(),
         } satisfies Order);
 
-        // Create order items
         const batch = db.batch();
         for (const item of items) {
             const itemRef = db.collection("orderItems").doc();
@@ -56,10 +55,12 @@ export const createOrder = async (req: Request, res: Response) => {
 export const getOrders = async (req: Request, res: Response) => {
     try {
         const snapshot = await db.collection("orders").get();
-        const orders = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
+        const orders = await Promise.all(
+            snapshot.docs.map(async (doc) => {
+                const userData = await getUserData(doc.data()?.userId);
+                return toResponseOrder(doc, userData);
+            })
+        );
         return res.json(orders);
     } catch (err) {
         return res.status(500).json({ error: "Failed to get orders" });
@@ -77,10 +78,8 @@ export const getUserOrders = async (req: Request, res: Response) => {
         const snapshot = await db.collection("orders")
             .where("userId", "==", userId)
             .get();
-        const orders = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
+        const userData = await getUserData(userId);
+        const orders = snapshot.docs.map(doc => toResponseOrder(doc, userData));
         return res.json(orders);
     } catch (err) {
         return res.status(500).json({ error: "Failed to get orders" });
@@ -94,10 +93,12 @@ export const getOrderDetails = async (req: Request, res: Response) => {
         const snapshot = await db.collection("orderItems")
             .where("orderId", "==", id)
             .get();
-        const items = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
+        const items = await Promise.all(
+            snapshot.docs.map(async (doc) => {
+                const productData = await getProductData(doc.data()?.productId);
+                return toResponseOrderItem(doc, productData);
+            })
+        );
         return res.json(items);
     } catch (err) {
         return res.status(500).json({ error: "Failed to get order items" });
@@ -118,5 +119,26 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         return res.json({ message: "Order status updated" });
     } catch (err) {
         return res.status(500).json({ error: "Failed to update order" });
+    }
+};
+
+const getUserData = async (userId: string) => {
+    try {
+        const user = await auth.getUser(userId);
+        return {
+            name: user.displayName || "",
+            email: user.email || "",
+        };
+    } catch {
+        return { name: "", email: "" };
+    }
+};
+
+const getProductData = async (productId: string) => {
+    try {
+        const doc = await db.collection("products").doc(productId).get();
+        return doc.data() || {};
+    } catch {
+        return {};
     }
 };

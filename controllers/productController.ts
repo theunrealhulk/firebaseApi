@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { db } from "../utils/firebase.js";
 import type { Product } from "../models/Product.js";
+import { toResponseProduct } from "../utils/responseTransform.js";
 
 export const createProduct = async (req: Request, res: Response) => {
     const { name, price, description } = req.body;
@@ -31,10 +32,7 @@ export const createProduct = async (req: Request, res: Response) => {
 export const getProducts = async (req: Request, res: Response) => {
     try {
         const snapshot = await db.collection("products").get();
-        const products = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
+        const products = snapshot.docs.map(doc => toResponseProduct(doc));
         return res.json(products);
     } catch (err) {
         return res.status(500).json({ error: "Failed to get products" });
@@ -49,7 +47,7 @@ export const getProduct = async (req: Request, res: Response) => {
         if (!doc.exists) {
             return res.status(404).json({ error: "Product not found" });
         }
-        return res.json({ id: doc.id, ...doc.data() });
+        return res.json(toResponseProduct(doc));
     } catch (err) {
         return res.status(500).json({ error: "Failed to get product" });
     }
