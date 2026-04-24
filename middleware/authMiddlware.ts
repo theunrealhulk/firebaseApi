@@ -15,7 +15,7 @@ export const authenticate = async (
     try {
         if (token) {
             const decodedToken = await auth.verifyIdToken(token);;
-            req.user = decodedToken as DecodedIdToken; // Attach user data to request
+            req.user = decodedToken as DecodedIdToken; 
             next();
         }
     } catch (err) {

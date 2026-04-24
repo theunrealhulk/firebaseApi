@@ -114,5 +114,14 @@ export const refresh = async (req: Request, res: Response) => {
     res.json({ message: "Token refreshed" });
 };
 export const logout = async (req: Request, res: Response) => {
-    res.json({ message: "Logged out" });
+    const uid = req.user?.uid;  // From auth middleware
+    try {
+        await auth.revokeRefreshTokens(uid);
+        
+        // Clear refresh token cookie if stored
+        res.clearCookie("refreshToken");
+        return res.json({ message: "Logged out successfully" });
+    } catch (err) {
+        return res.status(500).json({ error: "Logout failed" });
+    }
 };
